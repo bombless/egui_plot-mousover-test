@@ -36,19 +36,6 @@ fn main() {
     let app = App::new(
         duration as f64,
         fmax as f64,
-        track
-            .iter()
-            .map(|(t, f)| [*t as f64, *f as f64])
-            .collect(),
-        sampled_track
-            .iter()
-            .map(|(t, freqs)| (*t as f64, [freqs[0] as f64, freqs[1] as f64, freqs[2] as f64]))
-            .collect(),
-        equal_temperament_marks(20.0, fmax as f32)
-            .into_iter()
-            .map(|(f, name, midi)| (f as f64, name, midi))
-            .collect(),
-        global_peak.map(|(t, f, m)| (t as f64, f as f64, m)),
         sr_out,
         duration as f64,
     );
@@ -215,32 +202,11 @@ fn equal_temperament_marks(fmin: f32, fmax: f32) -> Vec<(f32, String, i32)> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum PlaybackTrack {
     Max,
-    Sample1,
-    Sample2,
-    Sample3,
-    BeatNotes,  // 新增：节拍音符
 }
 
-impl PlaybackTrack {
-    fn label(&self) -> &str {
-        match self {
-            PlaybackTrack::Max => "最大值（红线）",
-            PlaybackTrack::Sample1 => "采样频率 #1",
-            PlaybackTrack::Sample2 => "采样频率 #2",
-            PlaybackTrack::Sample3 => "采样频率 #3",
-            PlaybackTrack::BeatNotes => "节拍音符",  // 新增
-        }
-    }
-}
 
 struct App {
     duration: f64,
-    fmax: f64,
-    track: Vec<[f64; 2]>,
-    sampled_track: Vec<(f64, [f64; 3])>,
-    global_peak: Option<(f64, f64, f32)>,
-    note_marks: Vec<(f64, String, i32)>,
-
     show_note_lines: bool,
     show_sampled_freqs: bool,
     dense_threshold: usize,
@@ -266,22 +232,13 @@ impl App {
     fn new(
         duration: f64,
         fmax: f64,
-        track: Vec<[f64; 2]>,
-        sampled_track: Vec<(f64, [f64; 3])>,
-        note_marks: Vec<(f64, String, i32)>,
-        global_peak: Option<(f64, f64, f32)>,
         sr_out: u32,
         _total_duration: f64,
     ) -> Self {
         Self {
             duration,
-            fmax,
             time_bounds: (Cell::new(0.0), Cell::new(duration.max(1e-6))),
             freq_bounds: (Cell::new(0.0), Cell::new(fmax.max(1.0))),
-            track,
-            sampled_track,
-            global_peak,
-            note_marks,
             show_note_lines: true,
             show_sampled_freqs: true,
             dense_threshold: 36,
