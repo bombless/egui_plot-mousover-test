@@ -386,13 +386,6 @@ impl App {
                 let bounds = plot_ui.plot_bounds();
                 let y_span = self.freq_bounds.1.get() - self.freq_bounds.0.get();
 
-                // 计算节拍音符
-                let beat_notes = if self.show_beat_notes {
-                    self.analyze_beat_notes()
-                } else {
-                    Vec::new()
-                };
-
                 let start_beat = (bounds.min()[0] / beat_duration).floor() as i32;
                 let end_beat = (bounds.max()[0] / beat_duration).ceil() as i32;
 
@@ -423,8 +416,8 @@ impl App {
 
                     // 绘制节拍音符标注框
                     if self.show_beat_notes {
-                        if let Some((_, note_name, note_freq, is_strong)) = beat_notes.iter()
-                            .find(|(t, _, _, _)| (*t - beat_time).abs() < beat_duration * 0.1) {
+                        // if let Some((_, note_name, note_freq, is_strong)) = beat_notes.iter().take(1)
+                        //     .find(|(t, _, _, _)| (*t - beat_time).abs() < beat_duration * 0.1) {
 
                             // 矩形位置：在图表顶部
                             let rect_y_center = bounds.max()[1] - 0.05 * y_span;
@@ -437,113 +430,26 @@ impl App {
                             let rect_y_min = rect_y_center - rect_height / 2.0;
                             let rect_y_max = rect_y_center + rect_height / 2.0;
 
-                            let border_width = if *is_strong { 2.5f32 } else { 1.5 };
+                            let border_width = 1f32;
 
                             let rect_x_min = rect_x_min.min(self.time_bounds.1.get());
                             let rect_x_max = rect_x_max.max(self.time_bounds.0.get());
-                            let rect_y_min = rect_y_min.min(self.freq_bounds.1.get()) - border_width as f64;
                             let rect_y_max = rect_y_max.max(self.freq_bounds.0.get()) - border_width as f64;
 
-
-                            // 绘制矩形边框（四条线）
-                            let border_color = if *is_strong {
-                                Color32::from_rgb(40, 80, 160)
-                            } else {
-                                Color32::from_rgb(60, 100, 180)
-                            };
 
                             // 上边框
                             plot_ui.line(Line::new("PlotPoints", PlotPoints::from_iter(vec![
                                 [rect_x_min, rect_y_max],
                                 [rect_x_max, rect_y_max],
-                            ])).color(border_color).width(border_width));
+                            ])).width(border_width));
 
-                            // 下边框
-                            plot_ui.line(Line::new("PlotPoints", PlotPoints::from_iter(vec![
-                                [rect_x_min, rect_y_min],
-                                [rect_x_max, rect_y_min],
-                            ])).color(border_color).width(border_width));
 
-                            // 左边框
-                            plot_ui.line(Line::new("PlotPoints", PlotPoints::from_iter(vec![
-                                [rect_x_min, rect_y_min],
-                                [rect_x_min, rect_y_max],
-                            ])).color(border_color).width(border_width));
-
-                            // 右边框
-                            plot_ui.line(Line::new("PlotPoints", PlotPoints::from_iter(vec![
-                                [rect_x_max, rect_y_min],
-                                [rect_x_max, rect_y_max],
-                            ])).color(border_color).width(border_width));
-
-                        }
+                        // }
                     }
 
                 }
             }
 
-            // 绘制三个采样频率
-            if self.show_sampled_freqs {
-                for i in 0..3 {
-                    let points: Vec<[f64; 2]> = self.sampled_track.iter()
-                        .map(|(t, freqs)| [*t, freqs[i]])
-                        .collect();
-
-                    let (width, color) = match (i, self.selected_track) {
-                        (0, PlaybackTrack::Sample1) => (2.5, Color32::from_rgb(200, 100, 255)),
-                        (1, PlaybackTrack::Sample2) => (2.5, Color32::from_rgb(200, 100, 255)),
-                        (2, PlaybackTrack::Sample3) => (2.5, Color32::from_rgb(200, 100, 255)),
-                        _ => (1.5, Color32::from_rgb(147, 51, 234)),
-                    };
-
-                    let line = Line::new("show_sampled_freqs", PlotPoints::from_iter(points))
-                        .name(format!("采样频率 #{}", i + 1))
-                        .color(color)
-                        .width(width);
-                    plot_ui.line(line);
-                }
-            }
-
-            // 主频轨迹
-            let (max_width, max_color) = if self.selected_track == PlaybackTrack::Max {
-                (3.0, Color32::from_rgb(255, 50, 80))
-            } else {
-                (2.0, Color32::from_rgb(220, 20, 60))
-            };
-
-            let line = Line::new("主频轨迹（最大值）", PlotPoints::from_iter(self.track.iter().cloned()))
-                .name("主频轨迹（最大值）")
-                .color(max_color)
-                .width(max_width);
-            plot_ui.line(line);
-
-            // 全局峰值标记
-            if let Some((t_peak, f_peak, _)) = self.global_peak {
-                let peak_line = Line::new("全局峰值标记", PlotPoints::from_iter([[t_peak, f_peak], [t_peak, f_peak]]))
-                    .name(format!("峰值 {:.3}s, {:.1}Hz", t_peak, f_peak))
-                    .color(Color32::from_rgb(25, 130, 196));
-                plot_ui.line(peak_line);
-            }
-
-            // 播放位置竖线
-            if self.playing && self.play_position > 0.0 {
-                let play_line = VLine::new("播放位置竖线", self.play_position)
-                    .name(format!("播放位置: {:.2}s", self.play_position))
-                    .color(Color32::from_rgba_unmultiplied(0, 255, 0, 200))
-                    .width(2.0);
-                plot_ui.vline(play_line);
-            }
-
-            // 鼠标坐标提示
-            if let Some(pointer) = plot_ui.pointer_coordinate() {
-                let (name, f_note) = nearest_note(pointer.y);
-                let txt = format!("最近音: {name} ≈ {:.1}Hz", f_note);
-                plot_ui.text(
-                    PlotText::new("鼠标坐标提示", PlotPoint {x: pointer.x.clamp(self.time_bounds.0.get(), self.time_bounds.1.get()), y: pointer.y.clamp(self.freq_bounds.0.get(), self.freq_bounds.1.get())}, txt)
-                        .anchor(Align2([Align::Min, Align::Min]))
-                        .color(Color32::from_rgb(250, 50, 50)),
-                );
-            }
         });
     }
 }
