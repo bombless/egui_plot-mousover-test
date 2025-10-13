@@ -1,29 +1,26 @@
 use eframe::egui;
-use egui_plot::{HLine, Legend, Line, Plot, PlotPoint, PlotPoints, Text as PlotText, VLine};
-use egui::{RichText, Color32};
+use egui_plot::{Legend, Line, Plot, PlotPoints, VLine};
+use egui::Color32;
 use hound::{SampleFormat, WavReader};
-use rodio::{buffer::SamplesBuffer, OutputStream, OutputStreamHandle, Sink};
+use rodio::{OutputStream, OutputStreamHandle, Sink};
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::{env, error::Error, f32::consts::PI, path::Path, time::Instant};
+use std::{error::Error, f32::consts::PI, time::Instant};
 use std::cell::Cell;
 use std::fs::File;
 use std::io::Write;
-use eframe::egui::Align;
-use eframe::emath::{Align2, Vec2b};
+use eframe::emath::Vec2b;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     let win_size: usize = 2048;
     let hop_size: usize = 512;
 
-    let (mono, sample_rate) = read_wav_mono_f32()?;
+    let (mono, sample_rate) = read_wav_mono_f32().unwrap();
     let sr_in = sample_rate as f32;
     let duration = mono.len() as f32 / sr_in;
 
-    let (track, sampled_track, global_peak) = dominant_frequency_track(&mono, sr_in, win_size, hop_size)?;
+    let (track, sampled_track, global_peak) = dominant_frequency_track(&mono, sr_in, win_size, hop_size).unwrap();
     let fmax = sr_in / 2.0;
 
-    // 准备 App 状态
-    let file_name = "input.wav".to_string();
 
     let sr_out = 44_100u32;
 
@@ -69,9 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Box::new(|cc| {
             Ok(Box::new(app))
         }),
-    )?;
-
-    Ok(())
+    ).unwrap();
 }
 
 // ========================== 数据处理 ==========================
@@ -305,58 +300,6 @@ impl App {
         }
     }
 
-    // 分析每个节拍的主导音符
-    fn analyze_beat_notes(&self) -> Vec<(f64, String, f64, bool)> {
-        if self.bpm <= 0.0 {
-            return Vec::new();
-        }
-
-        let beat_duration = 60.0 / self.bpm;
-        let mut beat_notes = Vec::new();
-
-        let num_beats = (self.duration / beat_duration).ceil() as usize;
-
-        for beat_idx in 0..num_beats {
-            let beat_start = beat_idx as f64 * beat_duration;
-            let beat_end = beat_start + beat_duration;
-
-            if beat_start > self.duration {
-                break;
-            }
-
-            // 收集这个节拍内的所有频率数据
-            let mut freqs_in_beat = Vec::new();
-            for (t, freqs) in &self.sampled_track {
-                if *t >= beat_start && *t < beat_end && freqs[0] > 20.0 {
-                    freqs_in_beat.push(freqs[0]);
-                }
-            }
-
-            // 如果节拍内没有足够数据，尝试从 track 中获取
-            if freqs_in_beat.is_empty() {
-                for point in &self.track {
-                    if point[0] >= beat_start && point[0] < beat_end && point[1] > 20.0 {
-                        freqs_in_beat.push(point[1]);
-                    }
-                }
-            }
-
-            if !freqs_in_beat.is_empty() {
-                // 计算中位数频率（比平均值更稳定）
-                freqs_in_beat.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                let median_freq = freqs_in_beat[freqs_in_beat.len() / 2];
-
-                let (note_name, note_freq) = nearest_note(median_freq);
-                let is_bar_start = beat_idx % self.beats_per_bar == 0;
-
-                beat_notes.push((beat_start, note_name, note_freq, is_bar_start));
-            }
-        }
-
-        beat_notes
-    }
-
-
     fn draw_plot(&self, ui: &mut egui::Ui) {
         let plot = Plot::new("dominant_freq_plot")
             .legend(Legend::default())
@@ -366,18 +309,7 @@ impl App {
             .allow_drag(true)
             .default_x_bounds(self.time_bounds.0.get(), self.time_bounds.1.get())
             .default_y_bounds(self.freq_bounds.0.get(), self.freq_bounds.1.get())
-            .auto_bounds(Vec2b::new(true, true))
-            // .include_x(self.time_bounds.0)
-            // .include_x(self.time_bounds.1)
-            // .include_y(self.freq_bounds.0)
-            // .include_y(self.freq_bounds.1)
-            .label_formatter(|name, value| {
-                if !name.is_empty() {
-                    format!("{name}\n时间: {:.3}s\n频率: {:.1}Hz", value.x, value.y)
-                } else {
-                    format!("时间: {:.3}s\n频率: {:.1}Hz", value.x, value.y)
-                }
-            });
+            .auto_bounds(Vec2b::new(true, true));
 
         plot.show(ui, |plot_ui| {
             // 节拍线和音符标注
@@ -452,20 +384,6 @@ impl App {
 
         });
     }
-}
-
-fn nearest_note(freq: f64) -> (String, f64) {
-    if freq <= 0.0 {
-        return ("N/A".into(), 0.0);
-    }
-    let midi = (69.0 + 12.0 * (freq / 440.0).log2()).round();
-    let midi_i = midi.clamp(0.0, 127.0) as i32;
-    let names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-    let pc = (midi_i % 12) as usize;
-    let octave = (midi_i / 12) - 1;
-    let name = format!("{}{}", names[pc], octave);
-    let f = 440.0 * 2f64.powf((midi_i as f64 - 69.0) / 12.0);
-    (name, f)
 }
 
 impl eframe::App for App {
