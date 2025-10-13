@@ -38,20 +38,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app = App::new(
         duration as f64,
         fmax as f64,
-        track
-            .iter()
-            .map(|(t, f)| [*t as f64, *f as f64])
-            .collect(),
-        sampled_track
-            .iter()
-            .map(|(t, freqs)| (*t as f64, [freqs[0] as f64, freqs[1] as f64, freqs[2] as f64]))
-            .collect(),
-        equal_temperament_marks(20.0, fmax as f32)
-            .into_iter()
-            .map(|(f, name, midi)| (f as f64, name, midi))
-            .collect(),
-        global_peak.map(|(t, f, m)| (t as f64, f as f64, m)),
-        sr_out,
         duration as f64,
     );
 
@@ -226,24 +212,11 @@ enum PlaybackTrack {
 
 
 struct App {
-    track: Vec<[f64; 2]>,
-    sampled_track: Vec<(f64, [f64; 3])>,
-    global_peak: Option<(f64, f64, f32)>,
-    note_marks: Vec<(f64, String, i32)>,
 
-    show_note_lines: bool,
-    show_sampled_freqs: bool,
-    dense_threshold: usize,
     time_bounds: (f64, f64),
     freq_bounds: (f64, f64),
 
-    bpm: f64,
-    show_beat_lines: bool,
-    beats_per_bar: usize,
-    show_beat_notes: bool,  // 新增：是否显示节拍音符标注
 
-    selected_track: PlaybackTrack,
-    sr_out: u32,
     stream: Option<OutputStream>,
     handle: Option<OutputStreamHandle>,
     sink: Option<Sink>,
@@ -256,29 +229,11 @@ impl App {
     fn new(
         duration: f64,
         fmax: f64,
-        track: Vec<[f64; 2]>,
-        sampled_track: Vec<(f64, [f64; 3])>,
-        note_marks: Vec<(f64, String, i32)>,
-        global_peak: Option<(f64, f64, f32)>,
-        sr_out: u32,
         _total_duration: f64,
     ) -> Self {
         Self {
             time_bounds: (0.0, duration.max(1e-6)),
             freq_bounds: (0.0, fmax.max(1.0)),
-            track,
-            sampled_track,
-            global_peak,
-            note_marks,
-            show_note_lines: true,
-            show_sampled_freqs: true,
-            dense_threshold: 36,
-            bpm: 120.0,
-            show_beat_lines: true,
-            beats_per_bar: 4,
-            show_beat_notes: true,  // 默认显示节拍音符
-            selected_track: PlaybackTrack::Max,
-            sr_out,
             stream: None,
             handle: None,
             sink: None,
