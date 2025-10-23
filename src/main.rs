@@ -1,5 +1,5 @@
 use eframe::egui;
-use eframe::egui::{pos2, Window};
+use eframe::egui::{pos2, Window, FontId};
 use eframe::epaint::PathShape;
 use egui::{Align2, Color32, Painter, Stroke, Vec2};
 use std::collections::{HashMap};
@@ -8,8 +8,12 @@ use eframe::egui::Shape::LineSegment;
 use egui_plot::{Line, Plot, PlotPoint, PlotPoints, PlotUi};
 
 fn main() -> Result<(), Box<dyn Error>> {
+
+    let data: Vec<(f64, Vec<(String, f64)>)> = serde_json::from_slice(include_bytes!("../tones_track.json")).unwrap();
     let app = App {
-        data: prepare_data()
+        data: prepare_data(&data),
+        raw_data: data,
+        time: None,
     };
 
     let native_options = eframe::NativeOptions {
@@ -32,12 +36,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 struct App {
     data: Vec<(String, Color32, Vec<[PlotPoint; 2]>)>,
+    raw_data: Vec<(f64, Vec<(String, f64)>)>,
+    time: Option<f64>
 }
 
 mod color_gemini;
 
 
-fn draw_pie_chart(painter: &Painter) {
+fn draw_pie_chart(painter: &Painter, show_data: Option<&[(&str, f64)]>) {
     let radius = 200.0;
     let data = [
         ("C#5", 554.3652619537442, 77077.125),
@@ -55,10 +61,18 @@ fn draw_pie_chart(painter: &Painter) {
         ("D3", 146.8323839587038, 64.65748),
         ("A2", 110.0, 31.289621),
         ("E5", 659.2551138257398, 24.001055),
-    ];
+    ].iter().map(|&(x, _, y)| (x, y)).collect::<Vec<_>>();
 
-    let total: f64 = data.iter().map(|x| x.2).sum();
-    let center = pos2(300.0, 220.0);
+
+
+    let data_source = if let Some(data) = show_data {
+        data
+    } else {
+        &data[..]
+    };
+
+    let total: f64 = data_source.iter().map(|x| x.1).sum();
+    let center = pos2(310.0, 220.0);
 
     let mut start_angle = -PI / 2.0;
 
@@ -66,7 +80,9 @@ fn draw_pie_chart(painter: &Painter) {
 
     let mut label_height_offset = 0.0;
 
-    for (name, f, value) in data.iter() {
+    let momo_font = FontId::monospace(10.0);
+
+    for (name, value) in data_source {
         let sweep = (value / total * 2.0 * PI as f64) as f32;
 
         let mut points = vec![center];
@@ -85,18 +101,17 @@ fn draw_pie_chart(painter: &Painter) {
             Stroke::new(1.0, Color32::BLACK),
         ));
 
-        if value / total >= 0.1 {
-            let label = format!("{name:<5}{f:.1}Hz");
+        if value / total >= 0.05 {
+            let label = format!("{name:<3} {value:>6.1}");
             let label_angle = start_angle + sweep / 2.0;
             let label_pos = center + (radius * 1.2) * Vec2::new(label_angle.cos(), label_angle.sin());
-            painter.text(label_pos, Align2::CENTER_CENTER, label,
-                         egui::FontId::default(), Color32::BLACK);
+            painter.text(label_pos, Align2::CENTER_CENTER, label, momo_font.clone(), color);
 
-        } else if value / total >= 0.005 {
-            let label = format!("{name:<5}{f:.1}Hz");
+        } else {
+            let label = format!("{name:<3} {value:>6.1}");
 
-            painter.add(LineSegment {points: [pos2(10.0, 450.0 + label_height_offset), pos2(100.0, 450.0 + label_height_offset)], stroke: Stroke::new(10.0, color)});
-            painter.text(pos2(110.0, 450.0 + label_height_offset), Align2::LEFT_CENTER, label, egui::FontId::default(), Color32::BLACK);
+            painter.add(LineSegment {points: [pos2(10.0, 480.0 + label_height_offset), pos2(100.0, 480.0 + label_height_offset)], stroke: Stroke::new(10.0, color)});
+            painter.text(pos2(110.0, 480.0 + label_height_offset), Align2::LEFT_CENTER, label, momo_font.clone(), color);
             label_height_offset += 20.0;
         }
 
@@ -105,14 +120,13 @@ fn draw_pie_chart(painter: &Painter) {
     }
 }
 
-fn prepare_data() -> Vec<(String, Color32, Vec<[PlotPoint; 2]>)> {
+fn prepare_data(data: &[(f64, Vec<(String, f64)>)]) -> Vec<(String, Color32, Vec<[PlotPoint; 2]>)> {
     let mut container = HashMap::new();
-    let data: Vec<(f64, Vec<(String, f64)>)> = serde_json::from_slice(include_bytes!("../tones_track.json")).unwrap();
     let mut iter_color = color_gemini::ColorIterator::default();
     let mut tone_to_color = HashMap::new();
     let order = {
         let mut container = HashMap::new();
-        for (_, candidates) in &data {
+        for (_, candidates) in data {
             for (tone, w) in candidates {
                 *container.entry(tone).or_insert(0.0) += w;
             }
@@ -125,12 +139,12 @@ fn prepare_data() -> Vec<(String, Color32, Vec<[PlotPoint; 2]>)> {
         }
         order_container
     };
-    for (t, candidates) in &data {
+    for (t, candidates) in data {
         let mut acc = 0.0;
         let mut ordered_weights = candidates.iter().collect::<Vec<_>>();
         ordered_weights.sort_by(|(a, _), (b, _)| order[a].cmp(&order[b]));
         for (tone, weight) in ordered_weights {
-            let color = tone_to_color.entry(&*tone).or_insert_with(|| iter_color.next().unwrap());
+            let color = tone_to_color.entry(tone).or_insert_with(|| iter_color.next().unwrap());
 
             container
                 .entry(tone.clone())
@@ -142,7 +156,7 @@ fn prepare_data() -> Vec<(String, Color32, Vec<[PlotPoint; 2]>)> {
     container.into_iter().map(|(note, (color, data))| (note, color, data)).collect()
 }
 
-fn draw_graph2<'a, 'b: 'a>(plot_ui: &mut PlotUi<'a>, data: &'b [(String, Color32, Vec<[PlotPoint; 2]>)]) {
+fn draw_graph2<'a, 'b: 'a>(plot_ui: &mut PlotUi<'a>, data: &'b [(String, Color32, Vec<[PlotPoint; 2]>)]) -> Option<f64> {
 
     for (note, color, candidates) in data {
         for point_pair in candidates {
@@ -151,9 +165,11 @@ fn draw_graph2<'a, 'b: 'a>(plot_ui: &mut PlotUi<'a>, data: &'b [(String, Color32
         }
     }
 
+    plot_ui.pointer_coordinate().map(|p| p.x)
+
 }
 
-fn draw_graph(plot_ui: &mut PlotUi) {
+fn draw_graph(plot_ui: &mut PlotUi) -> Option<f64> {
 
     let data: Vec<(f64, Vec<(String, f64)>)> = serde_json::from_slice(include_bytes!("../tones_track.json")).unwrap();
     let mut iter_color = color_gemini::ColorIterator::default();
@@ -171,6 +187,7 @@ fn draw_graph(plot_ui: &mut PlotUi) {
 
     }
 
+    plot_ui.pointer_coordinate().map(|p| p.x)
 }
 
 impl eframe::App for App {
@@ -179,43 +196,31 @@ impl eframe::App for App {
             let painter = ui.painter();
 
             // draw_pie_chart(painter);
-            draw_pie_chart(painter);
+            if let Some(time) = self.time {
+                if let Some((_, data)) = self.raw_data.iter().find(|(t, ..)| time < *t) {
+                    draw_pie_chart(painter, Some(&data.iter().map(|(n, w)| (&**n, *w)).collect::<Vec<_>>()));
+                } else {
+                    draw_pie_chart(painter, None);
+                }
+            } else {
+                draw_pie_chart(painter, None);
+            }
 
             // draw_pie_chart_opus(painter);
             // draw_pie_chart_gemini(painter);
             // exit(0);
         });
-        // egui::SidePanel::left("left").resizable(true).min_width(70.0).max_width(300.0).default_width(100.0).show(ctx, |ui| {
-        //     ScrollArea::horizontal().max_width(600.0).show(ui, |ui| {
-        //         let painter = ui.painter();
-        //         draw_pie_chart(painter, Pos2::new(35.0, 100.0), 30.0, &[
-        //             ("A".to_string(), 1.0, Color32::RED),
-        //             ("B".to_string(), 3.0, Color32::BROWN),
-        //         ]);
-        //
-        //     });
-        // });
-        //
-        // egui::SidePanel::right("right").resizable(true).min_width(70.0).max_width(300.0).default_width(100.0).show(ctx, |ui| {
-        //     ScrollArea::horizontal().max_width(600.0).show(ui, |ui| {
-        //         let painter = ui.painter();
-        //         draw_pie_chart(painter, Pos2::new(570.0, 100.0), 30.0, &[
-        //             ("A".to_string(), 1.0, Color32::RED),
-        //             ("B".to_string(), 2.0, Color32::BROWN),
-        //         ]);
-        //
-        //     });
-        // });
+        Window::new("draw_graph").fade_in(true).default_open(false).collapsible(true).scroll([true, true]).show(ctx, |ui| {
 
-        Window::new("draw_graph").fade_in(true).collapsible(false).scroll([true, true]).show(ctx, |ui| {
-
-            Plot::new("plot-draw_graph").show(ui, draw_graph);
+            Plot::new("plot-draw_graph").show(ui, |plot_ui| {
+                self.time = draw_graph(plot_ui);
+            });
         });
 
         Window::new("draw_graph2").pivot(Align2::RIGHT_TOP).fade_in(true).collapsible(false).scroll([true, true]).show(ctx, |ui| {
 
             Plot::new("plot-draw_graph2").show(ui, |plot_ui| {
-                draw_graph2(plot_ui, &self.data[..]);
+                self.time = draw_graph2(plot_ui, &self.data[..]);
             });
         });
     }
