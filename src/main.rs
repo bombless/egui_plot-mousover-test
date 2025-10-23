@@ -38,17 +38,19 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         Window::new("first window").pivot(Align2::LEFT_BOTTOM).fade_in(true).default_open(false).collapsible(true).scroll([true, true]).show(ctx, |ui| {
 
+            let within = ui.rect_contains_pointer(ui.available_rect_before_wrap());
             Plot::new("first plot").show(ui, |plot_ui| {
                 plot_ui.line(Line::new("", vec![[0.0, 9.0], [0.0, 999.0]]));
-                self.time = plot_ui.pointer_coordinate().map(|p| p.x);
+                self.time = if within { plot_ui.pointer_coordinate().map(|p| p.x) } else { None };
             });
         });
 
         Window::new("second window").pivot(Align2::RIGHT_BOTTOM).fade_in(true).collapsible(false).scroll([true, true]).show(ctx, |ui| {
 
+            let within = ui.rect_contains_pointer(ui.available_rect_before_wrap());
             Plot::new("second plot").show(ui, |plot_ui| {
                 plot_ui.line(Line::new("", vec![[0.0, 9.0], [0.0, 999.0]]));
-                self.time2 = plot_ui.pointer_coordinate().map(|p| p.x);
+                self.time2 = if within { plot_ui.pointer_coordinate().map(|p| p.x) } else { None };
             });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
