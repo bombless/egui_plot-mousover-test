@@ -192,11 +192,11 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             let painter = ui.painter();
+            painter.text(Pos2::ZERO, Align2::LEFT_TOP, format!("time1 {:?}\ntime2 {:?}", self.time, self.time2), FontId::default(), Color32::BLACK);
 
             // draw_pie_chart(painter);
             if let Some(time) = self.time.or(self.time2) {
                 if let Some((_, data)) = self.raw_data.iter().find(|(t, ..)| time < *t) {
-                    ui.painter().text(Pos2::ZERO, Align2::LEFT_TOP, time.to_string(), FontId::default(), Color32::BLACK);
                     draw_pie_chart(painter, Some(&data.iter().map(|(n, w)| (&**n, *w)).collect::<Vec<_>>()));
                 } else {
                     draw_pie_chart(painter, None);
@@ -211,17 +211,29 @@ impl eframe::App for App {
         });
         Window::new("draw_graph").fade_in(true).default_open(false).collapsible(true).scroll([true, true]).show(ctx, |ui| {
 
+            let ui_contains_pointer = ui.rect_contains_pointer(ui.available_rect_before_wrap());
             Plot::new("plot-draw_graph").show(ui, |plot_ui| {
                 draw_graph(plot_ui);
-                self.time = plot_ui.pointer_coordinate().map(|p| p.x);
+                self.time = if ui_contains_pointer  {
+                    plot_ui.pointer_coordinate().map(|p| p.x)
+                } else {
+                    None
+                };
             });
         });
 
         Window::new("draw_graph2").pivot(Align2::RIGHT_TOP).fade_in(true).collapsible(false).scroll([true, true]).show(ctx, |ui| {
 
+            let ui_contains_pointer = ui.rect_contains_pointer(ui.available_rect_before_wrap());
             Plot::new("plot-draw_graph2").show(ui, |plot_ui| {
+
                 draw_graph2(plot_ui, &self.data);
-                self.time2 = plot_ui.pointer_coordinate().map(|p| p.x);
+                self.time2 = if ui_contains_pointer  {
+                    plot_ui.pointer_coordinate().map(|p| p.x)
+                } else {
+                    None
+                };
+
             });
         });
     }
