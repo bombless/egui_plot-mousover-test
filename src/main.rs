@@ -1,5 +1,5 @@
 use eframe::egui;
-use eframe::egui::{pos2, Window, FontId};
+use eframe::egui::{pos2, Window, FontId, Pos2};
 use eframe::epaint::PathShape;
 use egui::{Align2, Color32, Painter, Stroke, Vec2};
 use std::collections::{HashMap};
@@ -14,12 +14,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         data: prepare_data(&data),
         raw_data: data,
         time: None,
+        time2: None,
     };
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([900.0, 600.0])
-            .with_title("主频轨迹浏览器（支持滚轮缩放/平移）"),
+            .with_title("hover test"),
         ..Default::default()
     };
 
@@ -37,7 +38,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 struct App {
     data: Vec<(String, Color32, Vec<[PlotPoint; 2]>)>,
     raw_data: Vec<(f64, Vec<(String, f64)>)>,
-    time: Option<f64>
+    time: Option<f64>,
+    time2: Option<f64>,
 }
 
 mod color_gemini;
@@ -156,7 +158,7 @@ fn prepare_data(data: &[(f64, Vec<(String, f64)>)]) -> Vec<(String, Color32, Vec
     container.into_iter().map(|(note, (color, data))| (note, color, data)).collect()
 }
 
-fn draw_graph2<'a, 'b: 'a>(plot_ui: &mut PlotUi<'a>, data: &'b [(String, Color32, Vec<[PlotPoint; 2]>)]) -> Option<f64> {
+fn draw_graph2<'a, 'b: 'a>(plot_ui: &mut PlotUi<'a>, data: &'b [(String, Color32, Vec<[PlotPoint; 2]>)]) {
 
     for (note, color, candidates) in data {
         for point_pair in candidates {
@@ -165,11 +167,9 @@ fn draw_graph2<'a, 'b: 'a>(plot_ui: &mut PlotUi<'a>, data: &'b [(String, Color32
         }
     }
 
-    plot_ui.pointer_coordinate().map(|p| p.x)
-
 }
 
-fn draw_graph(plot_ui: &mut PlotUi) -> Option<f64> {
+fn draw_graph(plot_ui: &mut PlotUi) {
 
     let data: Vec<(f64, Vec<(String, f64)>)> = serde_json::from_slice(include_bytes!("../tones_track.json")).unwrap();
     let mut iter_color = color_gemini::ColorIterator::default();
@@ -186,8 +186,6 @@ fn draw_graph(plot_ui: &mut PlotUi) -> Option<f64> {
         }
 
     }
-
-    plot_ui.pointer_coordinate().map(|p| p.x)
 }
 
 impl eframe::App for App {
@@ -196,8 +194,9 @@ impl eframe::App for App {
             let painter = ui.painter();
 
             // draw_pie_chart(painter);
-            if let Some(time) = self.time {
+            if let Some(time) = self.time.or(self.time2) {
                 if let Some((_, data)) = self.raw_data.iter().find(|(t, ..)| time < *t) {
+                    ui.painter().text(Pos2::ZERO, Align2::LEFT_TOP, time.to_string(), FontId::default(), Color32::BLACK);
                     draw_pie_chart(painter, Some(&data.iter().map(|(n, w)| (&**n, *w)).collect::<Vec<_>>()));
                 } else {
                     draw_pie_chart(painter, None);
@@ -213,14 +212,16 @@ impl eframe::App for App {
         Window::new("draw_graph").fade_in(true).default_open(false).collapsible(true).scroll([true, true]).show(ctx, |ui| {
 
             Plot::new("plot-draw_graph").show(ui, |plot_ui| {
-                self.time = draw_graph(plot_ui);
+                draw_graph(plot_ui);
+                self.time = plot_ui.pointer_coordinate().map(|p| p.x);
             });
         });
 
         Window::new("draw_graph2").pivot(Align2::RIGHT_TOP).fade_in(true).collapsible(false).scroll([true, true]).show(ctx, |ui| {
 
             Plot::new("plot-draw_graph2").show(ui, |plot_ui| {
-                self.time = draw_graph2(plot_ui, &self.data[..]);
+                draw_graph2(plot_ui, &self.data);
+                self.time2 = plot_ui.pointer_coordinate().map(|p| p.x);
             });
         });
     }
